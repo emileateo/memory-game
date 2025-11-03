@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// API base URL - use relative path to work with nginx proxy
+const API_BASE_URL = '';
 
 // Gen 1 Pokemon IDs (first 8 for 4x4 grid = 16 cards, 8 pairs)
 const POKEMON_IDS = [1, 4, 7, 25, 39, 52, 54, 133]; // Bulbasaur, Charmander, Squirtle, Pikachu, Jigglypuff, Meowth, Psyduck, Eevee
