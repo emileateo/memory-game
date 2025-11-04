@@ -1,0 +1,9 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: memory-game-certificate
+  namespace: memory-game
+spec:
+  domains:
+    - your-domain.com  # Replace with your domain
+

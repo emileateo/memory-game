@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: memory-game-backend
+  namespace: memory-game
+  labels:
+    app: memory-game-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: memory-game-backend
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+

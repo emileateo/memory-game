@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-game-backend
+  namespace: memory-game
+  labels:
+    app: memory-game-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memory-game-backend
+  template:
+    metadata:
+      labels:
+        app: memory-game-backend
+    spec:
+      containers:
+        - name: backend
+          image: us-central1-docker.pkg.dev/mcse-sandbox/memory-game/backend:v4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: memory-game-config
+                  key: BACKEND_PORT
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memory-game-backend
+  namespace: memory-game
+  labels:
+    app: memory-game-backend
+spec:
+  type: NodePort
+  selector:
+    app: memory-game-backend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

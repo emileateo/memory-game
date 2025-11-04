@@ -83,3 +83,29 @@ The game results are stored in SQLite with the following schema:
 - `matches`: Number of matched pairs
 - `created_at`: Timestamp
 
+## Deployment to Google Kubernetes Engine (GKE)
+
+This application can be deployed to Google Kubernetes Engine for production use.
+
+### Quick Deploy
+
+Use the automated deployment script:
+
+```bash
+./deploy.sh --project YOUR_GCP_PROJECT_ID
+```
+
+### Manual Deployment
+
+For detailed step-by-step instructions, see [GKE_DEPLOYMENT.md](GKE_DEPLOYMENT.md).
+
+### Cleanup
+
+To remove all deployed resources:
+
+```bash
+./cleanup.sh --project YOUR_GCP_PROJECT_ID
+```
+
+**Note**: See the full deployment guide for production considerations including persistent storage, SSL certificates, and scaling configurations.
+

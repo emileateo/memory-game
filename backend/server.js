@@ -5,7 +5,11 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => res.sendStatus(200));
+app.get('/health', (req, res) => res.sendStatus(200));
+app.listen(PORT, '0.0.0.0', () => console.log(`listening on ${PORT}`));
 
 // Middleware
 app.use(cors());
@@ -91,7 +95,7 @@ app.get('/api/leaderboard', (req, res) => {
   );
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// app.listen(PORT, () => {
+//   console.log(`Server running on http://localhost:${PORT}`);
+// });
 

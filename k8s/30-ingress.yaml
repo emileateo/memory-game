@@ -1,0 +1,52 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: memory-game-ingress
+  namespace: memory-game
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    # kubernetes.io/ingress.global-static-ip-name: "memory-game-ip"
+    # networking.gke.io/managed-certificates: "memory-game-certificate"
+    # kubernetes.io/ingress.allow-http: "false"
+# spec:
+#   rules:
+#   - host: your-domain.com  # Replace with your domain
+#     http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: memory-game-frontend
+#             port:
+#               number: 80
+#       - path: /api
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: memory-game-backend
+#             port:
+#               number: 80
+spec:
+  defaultBackend:
+    service:
+      name: memory-game-frontend
+      port:
+        number: 80
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-game-backend
+                port:
+                  number: 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-game-frontend
+                port:
+                  number: 80
