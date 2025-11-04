@@ -13,10 +13,12 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_ID=""
-CLUSTER_NAME="memory-game-cluster"
-ZONE="us-central1-a"
-REGION="us-central1"
+CLUSTER_NAME="emilea-202511"
+ZONE="us-central1"
+REGION="us-central1"   # Artifact Registry region (e.g., us-central1)
+REPO="memory-game"      # Artifact Registry repository name
 NAMESPACE="memory-game"
+TAG="v$(date +%Y%m%d%H%M%S)"  # default unique tag per run
 
 # Functions
 print_info() {
@@ -67,10 +69,24 @@ setup_project() {
     print_info "Setting up GCP project..."
     gcloud config set project $PROJECT_ID
     gcloud services enable container.googleapis.com
-    gcloud services enable containerregistry.googleapis.com
+    gcloud services enable artifactregistry.googleapis.com
     gcloud services enable compute.googleapis.com
-    gcloud auth configure-docker
+    # Configure Docker to auth to Artifact Registry for this region
+    gcloud auth configure-docker $REGION-docker.pkg.dev
     print_info "Project setup complete!"
+}
+
+ensure_artifact_registry_repo() {
+    print_info "Ensuring Artifact Registry repo exists: $REPO in $REGION"
+    if ! gcloud artifacts repositories describe $REPO --location=$REGION >/dev/null 2>&1; then
+        gcloud artifacts repositories create $REPO \
+          --repository-format=docker \
+          --location=$REGION \
+          --description="Memory Game images"
+        print_info "Created Artifact Registry repo: $REPO"
+    else
+        print_info "Artifact Registry repo already exists"
+    fi
 }
 
 build_images() {
@@ -78,24 +94,22 @@ build_images() {
     
     print_info "Building backend image..."
     cd backend
-    docker build -t memory-game-backend:latest .
-    docker tag memory-game-backend:latest gcr.io/$PROJECT_ID/memory-game-backend:latest
+    docker build --platform=linux/amd64 -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/backend:$TAG .
     cd ..
     
     print_info "Building frontend image..."
     cd frontend
-    docker build -t memory-game-frontend:latest .
-    docker tag memory-game-frontend:latest gcr.io/$PROJECT_ID/memory-game-frontend:latest
+    docker build --platform=linux/amd64 -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/frontend:$TAG .
     cd ..
     
     print_info "Docker images built successfully!"
 }
 
 push_images() {
-    print_info "Pushing images to Google Container Registry..."
+    print_info "Pushing images to Artifact Registry..."
     
-    docker push gcr.io/$PROJECT_ID/memory-game-backend:latest
-    docker push gcr.io/$PROJECT_ID/memory-game-frontend:latest
+    docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/backend:$TAG
+    docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/frontend:$TAG
     
     print_info "Images pushed successfully!"
 }
@@ -135,14 +149,7 @@ configure_kubectl() {
 update_manifests() {
     print_info "Updating Kubernetes manifests..."
     
-    # Update image references
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        sed -i '' "s/YOUR_PROJECT_ID/$PROJECT_ID/g" k8s/*-deployment.yaml
-    else
-        # Linux
-        sed -i "s/YOUR_PROJECT_ID/$PROJECT_ID/g" k8s/*-deployment.yaml
-    fi
+    # No-op for templated manifests. We'll set images via kubectl set image.
     
     print_info "Manifests updated!"
 }
@@ -150,19 +157,36 @@ update_manifests() {
 deploy_application() {
     print_info "Deploying application..."
     
-    # Create namespace
-    kubectl apply -f k8s/namespace.yaml
+    # Create namespace (if you maintain a separate namespace file, apply it here)
+    kubectl get ns $NAMESPACE >/dev/null 2>&1 || kubectl create ns $NAMESPACE
     
-    # Deploy backend
-    print_info "Deploying backend..."
-    kubectl apply -f k8s/backend-deployment.yaml
-    kubectl apply -f k8s/backend-service.yaml
+    # Apply manifests (adjust to your consolidated files if needed)
+    print_info "Applying K8s manifests..."
+    if [ -d k8s ]; then
+      # Apply in order if split files exist
+      if [ -f k8s/01-config.yaml ]; then kubectl apply -f k8s/01-config.yaml; fi
+      if [ -f k8s/10-backend.yaml ]; then kubectl apply -f k8s/10-backend.yaml; fi
+      if [ -f k8s/20-frontend.yaml ]; then kubectl apply -f k8s/20-frontend.yaml; fi
+      if [ -f k8s/30-ingress.yaml ]; then kubectl apply -f k8s/30-ingress.yaml; fi
+      # Legacy split layout support
+      if [ -f k8s/backend-deployment.yaml ]; then kubectl apply -f k8s/backend-deployment.yaml; fi
+      if [ -f k8s/backend-service.yaml ]; then kubectl apply -f k8s/backend-service.yaml; fi
+      if [ -f k8s/frontend-deployment.yaml ]; then kubectl apply -f k8s/frontend-deployment.yaml; fi
+      if [ -f k8s/frontend-service.yaml ]; then kubectl apply -f k8s/frontend-service.yaml; fi
+      if [ -f k8s/ingress.yaml ]; then kubectl apply -f k8s/ingress.yaml; fi
+    fi
+
+    # Point deployments to the freshly built images
+    print_info "Updating Deployments to new images..."
+    kubectl set image deployment/memory-game-backend \
+      backend=$REGION-docker.pkg.dev/$PROJECT_ID/$REPO/backend:$TAG \
+      -n $NAMESPACE
+    kubectl set image deployment/memory-game-frontend \
+      frontend=$REGION-docker.pkg.dev/$PROJECT_ID/$REPO/frontend:$TAG \
+      -n $NAMESPACE
+
+    # Wait for rollouts
     kubectl rollout status deployment/memory-game-backend -n $NAMESPACE --timeout=300s
-    
-    # Deploy frontend
-    print_info "Deploying frontend..."
-    kubectl apply -f k8s/frontend-deployment.yaml
-    kubectl apply -f k8s/frontend-service.yaml
     kubectl rollout status deployment/memory-game-frontend -n $NAMESPACE --timeout=300s
     
     print_info "Application deployed successfully!"
@@ -216,10 +240,23 @@ main() {
                 ZONE="$2"
                 shift 2
                 ;;
+            --region)
+                REGION="$2"
+                shift 2
+                ;;
+            --repo)
+                REPO="$2"
+                shift 2
+                ;;
+            --tag)
+                TAG="$2"
+                shift 2
+                ;;
             --build-only)
                 check_prerequisites
                 prompt_project_id
                 setup_project
+                ensure_artifact_registry_repo
                 build_images
                 push_images
                 exit 0
@@ -240,6 +277,9 @@ main() {
                 echo "  --project ID         GCP Project ID"
                 echo "  --cluster NAME       Cluster name (default: memory-game-cluster)"
                 echo "  --zone ZONE          GCP Zone (default: us-central1-a)"
+                echo "  --region REGION      Artifact Registry region (default: us-central1)"
+                echo "  --repo NAME          Artifact Registry repo name (default: memory-game)"
+                echo "  --tag TAG            Image tag (default: timestamp)"
                 echo "  --build-only         Only build and push images"
                 echo "  --deploy-only        Only deploy to existing cluster"
                 echo "  --help               Show this help message"
@@ -257,6 +297,7 @@ main() {
     check_prerequisites
     prompt_project_id
     setup_project
+    ensure_artifact_registry_repo
     build_images
     push_images
     create_cluster
